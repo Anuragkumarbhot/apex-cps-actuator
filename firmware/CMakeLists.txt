@@ -26,3 +26,7 @@ add_test(NAME FrictionCompTest COMMAND test_friction)
 add_executable(test_control_loop tests/test_control_loop.c)
 target_link_libraries(test_control_loop m)
 add_test(NAME ControlLoopIntegrationTest COMMAND test_control_loop)
+
+add_executable(test_sensor_motion tests/test_sensor_motion.c)
+target_link_libraries(test_sensor_motion m)
+add_test(NAME SensorMotionTest COMMAND test_sensor_motion)
