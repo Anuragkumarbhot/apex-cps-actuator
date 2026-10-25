@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Apex-CPS iPhone 15 Telemetry & IMU Controller</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root { --bg: #0d1117; --card: #161b22; --accent: #2f81f7; --danger: #da3633; --text: #e6edf3; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 14px; }
+    h2 { margin: 0 0 10px 0; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
+    .badge { font-size: 0.75rem; background: #238636; padding: 4px 8px; border-radius: 6px; }
+    #canvas3d { width: 100%; height: 220px; background: #090d11; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+    .card { background: var(--card); border: 1px solid #30363d; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.88rem; }
+    .val { font-size: 1.25rem; font-weight: 700; color: var(--accent); margin-top: 4px; }
+    input[type=range] { width: 100%; margin: 8px 0; }
+    button { width: 100%; padding: 13px; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
+    .btn-imu { background: var(--accent); color: #fff; }
+    .btn-estop { background: var(--danger); color: #fff; }
+  </style>
+</head>
+<body>
+  <h2>Apex-CPS Dual-Axis Controller <span class="badge">CAN 1Mbps</span></h2>
+
+  <div id="canvas3d"></div>
+
+  <div class="card grid">
+    <div>
+      <div style="color:#8b949e;font-size:0.72rem;">YAW (AZIMUTH)</div>
+      <div class="mono">Cmd: <span id="cmdYaw">+0.000</span> rad</div>
+      <div class="mono val" id="actYaw">+0.000 rad</div>
+    </div>
+    <div>
+      <div style="color:#8b949e;font-size:0.72rem;">PITCH (ELEVATION)</div>
+      <div class="mono">Cmd: <span id="cmdPitch">+0.000</span> rad</div>
+      <div class="mono val" id="actPitch">+0.000 rad</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="color:#8b949e;font-size:0.72rem;margin-bottom:4px;">CAN 2.0B TX FRAME (ID 0x141 @ 50Hz)</div>
+    <div class="mono" id="canHex">0x141 [8] : 00 00 00 00 00 00 00 01</div>
+  </div>
+
+  <div class="card">
+    <button class="btn-imu" id="imuBtn" onclick="toggleIMU()">Enable iPhone 15 IMU Motion Follow</button>
+    <div style="margin-top:10px;font-size:0.85rem;">
+      <label>Manual Yaw (-1.57 to +1.57 rad)</label>
+      <input type="range" id="yawSlider" min="-1.57" max="1.57" step="0.01" value="0">
+      <label>Manual Pitch (-0.78 to +1.57 rad)</label>
+      <input type="range" id="pitchSlider" min="-0.78" max="1.57" step="0.01" value="0">
+    </div>
+  </div>
+
+  <button class="btn-estop" onclick="triggerEstop()">EMERGENCY STOP (0x000)</button>
+
+  <script>
+    // 3D Actuator Gimbal Setup
+    const container = document.getElementById('canvas3d');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(2.5, 2.0, 3.2);
+    camera.lookAt(0, 0.4, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1.2);
+    light.position.set(4, 6, 4);
+    scene.add(light, new THREE.AmbientLight(0x404040));
+    scene.add(new THREE.GridHelper(4, 10, 0x30363d, 0x21262d));
+
+    const yawGroup = new THREE.Group();
+    const baseMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.45, 0.5, 0.5, 24),
+      new THREE.MeshStandardMaterial({ color: 0x2f81f7, metalness: 0.5, roughness: 0.4 })
+    );
+    baseMesh.position.y = 0.25;
+    yawGroup.add(baseMesh);
+
+    const pitchGroup = new THREE.Group();
+    pitchGroup.position.y = 0.65;
+    const pitchJoint = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.32, 0.45, 24),
+      new THREE.MeshStandardMaterial({ color: 0x8b949e, metalness: 0.6, roughness: 0.3 })
+    );
+    pitchJoint.rotation.z = Math.PI / 2;
+    const armMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 1.1, 0.18),
+      new THREE.MeshStandardMaterial({ color: 0x3fb950, metalness: 0.4, roughness: 0.4 })
+    );
+    armMesh.position.y = 0.55;
+    pitchGroup.add(pitchJoint, armMesh);
+    yawGroup.add(pitchGroup);
+    scene.add(yawGroup);
+
+    // State & Control Loop
+    let targetYaw = 0, targetPitch = 0, actYaw = 0, actPitch = 0;
+    let imuActive = false, estop = false;
+    const yawSlider = document.getElementById('yawSlider');
+    const pitchSlider = document.getElementById('pitchSlider');
+
+    yawSlider.oninput = e => { if (!imuActive) targetYaw = parseFloat(e.target.value); };
+    pitchSlider.oninput = e => { if (!imuActive) targetPitch = parseFloat(e.target.value); };
+
+    async function toggleIMU() {
+      if (!imuActive) {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          const perm = await DeviceOrientationEvent.requestPermission();
+          if (perm !== 'granted') return alert('Motion permission denied');
+        }
+        window.addEventListener('deviceorientation', handleMotion);
+        imuActive = true; estop = false;
+        document.getElementById('imuBtn').innerText = 'Disable iPhone IMU Follow';
+      } else {
+        window.removeEventListener('deviceorientation', handleMotion);
+        imuActive = false;
+        document.getElementById('imuBtn').innerText = 'Enable iPhone 15 IMU Motion Follow';
+      }
+    }
+
+    function handleMotion(e) {
+      if (!imuActive || estop) return;
+      targetYaw = Math.max(-1.57, Math.min(1.57, (e.gamma || 0) * (Math.PI / 180)));
+      targetPitch = Math.max(-0.78, Math.min(1.57, (e.beta || 0) * (Math.PI / 180)));
+      yawSlider.value = targetYaw;
+      pitchSlider.value = targetPitch;
+    }
+
+    function triggerEstop() {
+      estop = true; imuActive = false; targetYaw = 0; targetPitch = 0;
+      document.getElementById('imuBtn').innerText = 'Enable iPhone 15 IMU Motion Follow';
+    }
+
+    setInterval(() => {
+      if (!estop) {
+        actYaw += (targetYaw - actYaw) * 0.18;
+        actPitch += (targetPitch - actPitch) * 0.18;
+      }
+      yawGroup.rotation.y = -actYaw;
+      pitchGroup.rotation.x = actPitch;
+      renderer.render(scene, camera);
+
+      document.getElementById('cmdYaw').innerText = (targetYaw >= 0 ? '+' : '') + targetYaw.toFixed(3);
+      document.getElementById('cmdPitch').innerText = (targetPitch >= 0 ? '+' : '') + targetPitch.toFixed(3);
+      document.getElementById('actYaw').innerText = (actYaw >= 0 ? '+' : '') + actYaw.toFixed(3) + ' rad';
+      document.getElementById('actPitch').innerText = (actPitch >= 0 ? '+' : '') + actPitch.toFixed(3) + ' rad';
+
+      const rawY = Math.round(targetYaw / 0.0001) & 0xFFFF;
+      const rawP = Math.round(targetPitch / 0.0001) & 0xFFFF;
+      const b = [rawY & 0xFF, (rawY >> 8) & 0xFF, rawP & 0xFF, (rawP >> 8) & 0xFF, 0, 0, 0, estop ? 0 : 1]
+        .map(x => x.toString(16).padStart(2, '0').toUpperCase());
+      document.getElementById('canHex').innerText = `0x141 [8] : ${b.join(' ')}`;
+    }, 20);
+  </script>
+</body>
+</html>
