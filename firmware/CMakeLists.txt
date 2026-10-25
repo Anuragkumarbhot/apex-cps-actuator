@@ -11,3 +11,6 @@ add_test(NAME BiquadFilterTest COMMAND test_biquad)
 add_executable(test_cascade_thermal tests/test_cascade_thermal.c src/pid_cascade.c)
 target_link_libraries(test_cascade_thermal m)
 add_test(NAME CascadeThermalTest COMMAND test_cascade_thermal)
+
+add_executable(test_watchdog tests/test_watchdog.c)
+add_test(NAME SafetyWatchdogTest COMMAND test_watchdog)
