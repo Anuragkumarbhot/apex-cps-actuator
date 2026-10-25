@@ -1,346 +1,296 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Apex-CPS Dual-Axis Actuator | Web IMU Spatial Controller</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <style>
-    body { background-color: #0b0f19; color: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-x: hidden; }
-    .glass { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.6); }
-    .led-green { box-shadow: 0 0 10px #22c55e; }
-    .led-amber { box-shadow: 0 0 12px #f59e0b; }
-    .led-red { box-shadow: 0 0 14px #ef4444; }
-  </style>
-  <link rel="manifest" href="manifest.json" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex-CPS Actuator Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="manifest" href="manifest.json" />
 </head>
-<body class="min-h-screen flex flex-col p-3 gap-3">
-  <header class="glass rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
-    <div class="flex items-center gap-3">
-      <div id="status-led" class="w-3.5 h-3.5 rounded-full bg-emerald-500 led-green"></div>
-      <div>
-        <h1 class="text-sm md:text-base font-bold tracking-wider text-white">APEX-CPS DUAL-AXIS ACTUATOR</h1>
-        <p class="text-xs text-slate-400">STM32G4 FOC • CAN 2.0B (0x141) • Web IMU Spatial Controller</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-2">
-      <input id="ws-url" type="text" value="ws://localhost:8765" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-sky-400 w-44" placeholder="ws://IP:8765" />
-      <button onclick="connectWebSocket()" class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">Connect Bridge</button>
-      <button onclick="downloadBlackboxCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">📥 Blackbox CSV</button>
-      <button id="estop-btn" onclick="toggleEstop()" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">E-STOP (0x000)</button>
-    </div>
-  </header>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased h-screen flex flex-col overflow-hidden">
 
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 flex-1">
-    <div class="glass rounded-xl p-4 flex flex-col gap-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-        <span class="text-xs font-bold text-sky-400 uppercase tracking-wider">Web IMU Teleop</span>
-        <span id="imu-badge" class="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded">Standby</span>
-      </div>
-      <button id="imu-btn" onclick="enableWebIMU()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-4 rounded-lg text-xs tracking-wide transition shadow-lg">
-        Enable Web IMU Motion Follow
-      </button>
-      <div class="space-y-3">
-        <div>
-          <div class="flex justify-between text-xs mb-1">
-            <span>Target Yaw (Azimuth)</span>
-            <span id="yaw-val" class="text-sky-400 font-bold">0.00 rad</span>
-          </div>
-          <input id="yaw-slider" type="range" min="-1.57" max="1.57" step="0.01" value="0" class="w-full accent-sky-500" />
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex justify-between items-center z-10">
+        <div class="flex items-center space-x-3">
+            <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+            <h1 class="font-bold text-lg tracking-wide" id="ui-title">Apex-CPS Actuator (Yaw / Pitch)</h1>
         </div>
-        <div>
-          <div class="flex justify-between text-xs mb-1">
-            <span>Target Pitch (Elevation)</span>
-            <span id="pitch-val" class="text-purple-400 font-bold">0.00 rad</span>
-          </div>
-          <input id="pitch-slider" type="range" min="-1.20" max="1.20" step="0.01" value="0" class="w-full accent-purple-500" />
+        <div class="flex items-center space-x-2">
+            <!-- Language Selector -->
+            <select id="lang-select" onchange="changeLanguage(this.value)" class="bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded px-2 py-1.5 focus:outline-none">
+                <option value="en">English</option>
+                <option value="hi">हिंदी (Hindi)</option>
+                <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
+            </select>
+            <button onclick="downloadBlackboxCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition" id="ui-btn-csv">📥 Blackbox CSV</button>
+            <button id="estop-btn" onclick="toggleEstop()" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded transition shadow-lg">E-STOP: OFF</button>
         </div>
-      </div>
-      <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 space-y-2">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="text-xs font-bold text-emerald-400">250 Hz Biquad Notch Filter</div>
-            <div class="text-[11px] text-slate-400">Harmonic Drive Resonance Suppression</div>
-          </div>
-          <input id="notch-toggle" type="checkbox" checked class="w-4 h-4 accent-emerald-500" />
-        </div>
-        <div class="flex justify-between text-[11px] text-slate-300 pt-1 border-t border-slate-800">
-          <span>Attenuation @ 250 Hz:</span>
-          <span id="notch-status" class="text-emerald-400 font-bold">-18.4 dB (Active)</span>
-        </div>
-      </div>
-      <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 mt-auto">
-        <div class="text-[11px] text-slate-400 mb-1 flex justify-between">
-          <span>CAN 2.0B TX FRAME (ID: 0x141)</span>
-          <span id="can-rate" class="text-emerald-400">200 Hz</span>
-        </div>
-        <div id="can-hex" class="text-sm font-bold tracking-widest text-amber-400 break-all">00 00 00 00 00 00 01 01</div>
-      </div>
-    </div>
+    </header>
 
-    <div class="glass rounded-xl p-3 flex flex-col relative min-h-[320px]">
-      <div class="absolute top-3 left-4 z-10 pointer-events-none">
-        <div class="text-xs font-bold text-white">3D DIGITAL TWIN (THREE.JS)</div>
-        <div class="text-[11px] text-slate-400">Real-Time Gimbal & Gravity Vector</div>
-      </div>
-      <div id="three-container" class="w-full h-full flex-1 rounded-lg overflow-hidden"></div>
+    <!-- Main Workspace -->
+    <div class="flex flex-1 relative overflow-hidden">
+        <!-- 3D Digital Twin Viewport -->
+        <div id="canvas-container" class="flex-1 h-full cursor-grab"></div>
+
+        <!-- Right Control Panel -->
+        <aside class="w-80 bg-slate-900/90 backdrop-blur border-l border-slate-800 p-4 flex flex-col space-y-4 overflow-y-auto z-10">
+            <div>
+                <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2" id="ui-telemetry-hdr">Real-Time Telemetry</h2>
+                <div class="bg-slate-950/60 rounded-lg p-3 border border-slate-800 space-y-2 text-xs">
+                    <div class="flex justify-between"><span class="text-slate-400" id="ui-yaw">Yaw Angle:</span> <span id="val-yaw" class="font-mono text-emerald-400">0.00 rad</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400" id="ui-pitch">Pitch Angle:</span> <span id="val-pitch" class="font-mono text-emerald-400">0.00 rad</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400" id="ui-iq">Iq Current:</span> <span id="val-iq" class="font-mono text-cyan-400">0.00 A</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400" id="ui-temp">Inverter Temp:</span> <span id="val-temp" class="font-mono text-amber-400">42.0 °C</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400" id="ui-state">Inverter State:</span> <span id="val-state" class="font-bold text-emerald-400">ARMED</span></div>
+                </div>
+            </div>
+
+            <!-- Advanced Regional Control Toggles & Sliders -->
+            <div>
+                <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2" id="ui-control-hdr">Advanced Control Tuning</h2>
+                <div class="bg-slate-950/60 rounded-lg p-3 border border-slate-800 space-y-3 text-xs">
+                    <div>
+                        <div class="flex justify-between mb-1"><span id="ui-kp">Position Kp:</span> <span id="val-kp" class="font-mono">15.0</span></div>
+                        <input type="range" min="5" max="30" step="0.5" value="15" oninput="updateKp(this.value)" class="w-full accent-emerald-500">
+                    </div>
+                    <div>
+                        <div class="flex justify-between mb-1"><span id="ui-friction">Friction Comp (LuGre):</span> <span id="val-friction" class="font-mono">0.8 A</span></div>
+                        <input type="range" min="0" max="2.0" step="0.1" value="0.8" oninput="updateFriction(this.value)" class="w-full accent-emerald-500">
+                    </div>
+                    <div class="flex items-center justify-between pt-1 border-t border-slate-800">
+                        <span id="ui-notch">250Hz Biquad Notch</span>
+                        <input type="checkbox" id="notch-toggle" checked class="accent-emerald-500 w-4 h-4 cursor-pointer">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Motion Presets -->
+            <div>
+                <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2" id="ui-presets-hdr">Motion Presets</h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setTarget(0, 0)" class="bg-slate-800 hover:bg-slate-700 py-2 rounded text-xs font-medium transition" id="ui-home">Home (0,0)</button>
+                    <button onclick="setTarget(1.57, 0.78)" class="bg-slate-800 hover:bg-slate-700 py-2 rounded text-xs font-medium transition" id="ui-sweep">Sweep Test</button>
+                </div>
+            </div>
+        </aside>
     </div>
 
-    <div class="glass rounded-xl p-4 flex flex-col gap-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-        <span class="text-xs font-bold text-amber-400 uppercase tracking-wider">Inverter Thermal Protection</span>
-        <div class="flex items-center gap-2">
-          <div id="thermal-led" class="w-3 h-3 rounded-full bg-emerald-500 led-green"></div>
-          <span id="thermal-state" class="text-xs font-bold text-emerald-400">NOMINAL</span>
-        </div>
-      </div>
-      <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 space-y-3">
-        <div class="flex justify-between items-end">
-          <div>
-            <div class="text-[11px] text-slate-400">MOSFET Bridge Temp</div>
-            <div id="temp-readout" class="text-2xl font-bold text-white">38.5 °C</div>
-          </div>
-          <div class="text-right">
-            <div class="text-[11px] text-slate-400">Derated Iq Limit</div>
-            <div id="iq-limit-readout" class="text-lg font-bold text-sky-400">20.0 A (100%)</div>
-          </div>
-        </div>
-        <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
-          <div id="thermal-bar" class="bg-emerald-500 h-full transition-all duration-150" style="width: 38.5%"></div>
-        </div>
-        <div class="flex justify-between text-[10px] text-slate-400">
-          <span>25°C Ambient</span>
-          <span class="text-amber-400">75°C Derate Start</span>
-          <span class="text-rose-500">95°C Cutoff</span>
-        </div>
-        <div class="pt-2 border-t border-slate-800">
-          <div class="flex justify-between text-[11px] mb-1">
-            <span class="text-slate-300">Simulate Thermal Load (Test Derating)</span>
-            <span class="text-amber-400 font-bold" id="sim-temp-label">38.5 °C</span>
-          </div>
-          <input id="temp-slider" type="range" min="25" max="100" step="0.5" value="38.5" class="w-full accent-amber-500" />
-        </div>
-      </div>
-      <div class="flex-1 flex flex-col bg-slate-950 border border-slate-800 rounded-lg p-3">
-        <div class="flex justify-between text-[11px] text-slate-400 mb-2">
-          <span>FOC 3-PHASE CURRENTS (Ia, Ib, Ic)</span>
-          <span id="iq-actual" class="text-sky-400 font-bold">Iq: 1.85 A</span>
-        </div>
-        <canvas id="foc-scope" class="w-full h-36 flex-1 rounded bg-slate-900"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    let targetYaw = 0.0, targetPitch = 0.0, actualYaw = 0.0, actualPitch = 0.0;
-    let inverterTemp = 38.5, maxCurrentA = 20.0, estopActive = false, ws = null;
-
-    const yawSlider = document.getElementById('yaw-slider');
-    const pitchSlider = document.getElementById('pitch-slider');
-    const tempSlider = document.getElementById('temp-slider');
-    const notchToggle = document.getElementById('notch-toggle');
-
-    yawSlider.addEventListener('input', e => { targetYaw = parseFloat(e.target.value); });
-    pitchSlider.addEventListener('input', e => { targetPitch = parseFloat(e.target.value); });
-    tempSlider.addEventListener('input', e => {
-      inverterTemp = parseFloat(e.target.value);
-      document.getElementById('sim-temp-label').innerText = inverterTemp.toFixed(1) + ' °C';
-    });
-    notchToggle.addEventListener('change', e => {
-      const st = document.getElementById('notch-status');
-      st.innerText = e.target.checked ? '-18.4 dB (Active)' : '0.0 dB (Bypassed)';
-      st.className = e.target.checked ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold';
-    });
-
-    function computeThermalDerating(tempC) {
-      if (tempC <= 75.0) return 1.0;
-      if (tempC >= 95.0) return 0.0;
-      return (95.0 - tempC) / (95.0 - 75.0);
-    }
-
-    function packCanFrame(yaw, pitch, torqueScale, estop) {
-      const buf = new ArrayBuffer(8);
-      const view = new DataView(buf);
-      view.setInt16(0, Math.round(yaw * 1000), true);
-      view.setInt16(2, Math.round(pitch * 1000), true);
-      view.setInt16(4, Math.round(torqueScale * 100), true);
-      view.setUint8(6, notchToggle.checked ? 1 : 0);
-      view.setUint8(7, estop ? 0 : 1);
-      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-    }
-
-    async function enableWebIMU() {
-      const badge = document.getElementById('imu-badge');
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-          const permission = await DeviceOrientationEvent.requestPermission();
-          if (permission === 'granted') {
-            window.addEventListener('deviceorientation', handleOrientation);
-            badge.innerText = 'IMU Active';
-            badge.className = 'text-[11px] bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded font-bold';
-          }
-        } catch (err) { alert('IMU Permission denied or requires HTTPS.'); }
-      } else {
-        window.addEventListener('deviceorientation', handleOrientation);
-        badge.innerText = 'IMU Listening';
-        badge.className = 'text-[11px] bg-sky-900 text-sky-300 px-2 py-0.5 rounded font-bold';
-      }
-    }
-
-    function handleOrientation(event) {
-      if (estopActive) return;
-      targetYaw = Math.max(-1.57, Math.min(1.57, ((event.gamma || 0) * Math.PI) / 180));
-      targetPitch = Math.max(-1.20, Math.min(1.20, (((event.beta || 0) - 45) * Math.PI) / 180));
-      yawSlider.value = targetYaw; pitchSlider.value = targetPitch;
-    }
-
-    function toggleEstop() {
-      estopActive = !estopActive;
-      const btn = document.getElementById('estop-btn');
-      btn.innerText = estopActive ? 'RESET E-STOP' : 'E-STOP (0x000)';
-      btn.className = estopActive
-        ? 'bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded transition'
-        : 'bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded transition';
-    }
-
-    function connectWebSocket() {
-      try {
-        ws = new WebSocket(document.getElementById('ws-url').value);
-        ws.onopen = () => { document.getElementById('imu-badge').innerText = 'WS Linked'; };
-        ws.onmessage = (msg) => {
-          const data = JSON.parse(msg.data);
-          if (data.inverter_temp_c) { inverterTemp = data.inverter_temp_c; tempSlider.value = inverterTemp; }
+    <!-- Localization Dictionary -->
+    <script>
+        const i18n = {
+            en: {
+                title: "Apex-CPS Actuator (Yaw / Pitch)",
+                btnCsv: "📥 Blackbox CSV",
+                telemetryHdr: "Real-Time Telemetry",
+                yaw: "Yaw Angle:",
+                pitch: "Pitch Angle:",
+                iq: "Iq Current:",
+                temp: "Inverter Temp:",
+                state: "Inverter State:",
+                controlHdr: "Advanced Control Tuning",
+                kp: "Position Kp:",
+                friction: "Friction Comp (LuGre):",
+                notch: "250Hz Biquad Notch",
+                presetsHdr: "Motion Presets",
+                home: "Home (0,0)",
+                sweep: "Sweep Test"
+            },
+            hi: {
+                title: "Apex-CPS एक्चुएटर (Yaw / Pitch)",
+                btnCsv: "📥 ब्लैकबॉक्स CSV",
+                telemetryHdr: "रियल-टाइम टेलीमेट्री",
+                yaw: "Yaw कोण:",
+                pitch: "Pitch कोण:",
+                iq: "Iq करंट:",
+                temp: "इन्वर्टर तापमान:",
+                state: "इन्वर्टर स्थिति:",
+                controlHdr: "उन्नत नियंत्रण ट्यूनिंग",
+                kp: "पोजीशन Kp:",
+                friction: "घर्षण मुआवजा (LuGre):",
+                notch: "250Hz बiquad नॉच",
+                presetsHdr: "मोशन प्रीसेट",
+                home: "होम (0,0)",
+                sweep: "स्वीप टेस्ट"
+            },
+            pa: {
+                title: "Apex-CPS ਐਕਚੁਏਟਰ (Yaw / Pitch)",
+                btnCsv: "📥 ਬਲੈਕਬਾਕਸ CSV",
+                telemetryHdr: "ਰੀਅਲ-ਟਾਈਮ ਟੈਲੀਮੈਟਰੀ",
+                yaw: "Yaw ਕੋਣ:",
+                pitch: "Pitch ਕੋਣ:",
+                iq: "Iq ਕਰੰਟ:",
+                temp: "ਇਨਵਰਟਰ ਤਾਪਮਾਨ:",
+                state: "ਇਨਵਰਟਰ ਸਥਿਤੀ:",
+                controlHdr: "ਉੱਨਤ ਕੰਟਰੋਲ ਟਿਊਨਿੰਗ",
+                kp: "ਪੋਜੀਸ਼ਨ Kp:",
+                friction: "ਰਗੜ ਮੁਆਵਜ਼ਾ (LuGre):",
+                notch: "250Hz ਬਾਇਕਵਾਡ ਨੌਚ",
+                presetsHdr: "ਮੋਸ਼ਨ ਪ੍ਰੀਸੈੱਟ",
+                home: "ਘਰ (0,0)",
+                sweep: "ਸਵੀਪ ਟੈਸਟ"
+            }
         };
-      } catch (e) {}
-    }
 
-    const container = document.getElementById('three-container');
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(3.2, 2.4, 3.8); camera.lookAt(0, 0.5, 0);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    container.appendChild(renderer.domElement);
-
-    const light = new THREE.DirectionalLight(0xffffff, 1.2);
-    light.position.set(5, 8, 5);
-    scene.add(light, new THREE.AmbientLight(0x404060, 1.2), new THREE.GridHelper(6, 12, 0x334155, 0x1e293b));
-
-    const yawGroup = new THREE.Group();
-    const baseMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 0.4, 32), new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.3 }));
-    baseMesh.position.y = 0.2; scene.add(baseMesh);
-
-    const turretMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 0.8), new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.5, roughness: 0.4 }));
-    turretMesh.position.y = 0.85; yawGroup.add(turretMesh);
-
-    const pitchGroup = new THREE.Group(); pitchGroup.position.y = 1.0;
-    const armMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 1.8), new THREE.MeshStandardMaterial({ color: 0xa855f7, metalness: 0.4, roughness: 0.3 }));
-    armMesh.position.z = 0.6; pitchGroup.add(armMesh); yawGroup.add(pitchGroup); scene.add(yawGroup);
-
-    const canvas = document.getElementById('foc-scope');
-    const ctx = canvas.getContext('2d');
-    let phaseTime = 0;
-
-    function animate() {
-      requestAnimationFrame(animate);
-      const derate = estopActive ? 0.0 : computeThermalDerating(inverterTemp);
-      const effectiveMaxIq = maxCurrentA * derate;
-
-      document.getElementById('temp-readout').innerText = inverterTemp.toFixed(1) + ' °C';
-      document.getElementById('iq-limit-readout').innerText = `${effectiveMaxIq.toFixed(1)} A (${Math.round(derate * 100)}%)`;
-
-      const thermalBar = document.getElementById('thermal-bar');
-      const thermalLed = document.getElementById('thermal-led');
-      const thermalState = document.getElementById('thermal-state');
-      thermalBar.style.width = `${Math.min(100, inverterTemp)}%`;
-
-      if (inverterTemp >= 95.0 || estopActive) {
-        thermalBar.className = 'bg-rose-600 h-full transition-all duration-150';
-        thermalLed.className = 'w-3 h-3 rounded-full bg-rose-500 led-red';
-        thermalState.innerText = estopActive ? 'E-STOP CUTOFF' : 'THERMAL CUTOFF';
-        thermalState.className = 'text-xs font-bold text-rose-500';
-      } else if (inverterTemp > 75.0) {
-        thermalBar.className = 'bg-amber-500 h-full transition-all duration-150';
-        thermalLed.className = 'w-3 h-3 rounded-full bg-amber-400 led-amber';
-        thermalState.innerText = 'DERATING ACTIVE';
-        thermalState.className = 'text-xs font-bold text-amber-400';
-      } else {
-        thermalBar.className = 'bg-emerald-500 h-full transition-all duration-150';
-        thermalLed.className = 'w-3 h-3 rounded-full bg-emerald-500 led-green';
-        thermalState.innerText = 'NOMINAL';
-        thermalState.className = 'text-xs font-bold text-emerald-400';
-      }
-
-      if (derate > 0) {
-        actualYaw += (targetYaw - actualYaw) * 0.12 * derate;
-        actualPitch += (targetPitch - actualPitch) * 0.12 * derate;
-      }
-      yawGroup.rotation.y = actualYaw; pitchGroup.rotation.x = -actualPitch;
-      document.getElementById('yaw-val').innerText = actualYaw.toFixed(2) + ' rad';
-      document.getElementById('pitch-val').innerText = actualPitch.toFixed(2) + ' rad';
-      document.getElementById('can-hex').innerText = packCanFrame(actualYaw, actualPitch, derate, estopActive);
-
-      const iqCmd = Math.min(effectiveMaxIq, Math.abs(1.85 * Math.cos(actualPitch) + (targetPitch - actualPitch) * 8.0) * derate);
-      document.getElementById('iq-actual').innerText = `Iq: ${iqCmd.toFixed(2)} A`;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const w = canvas.width, h = canvas.height;
-      const amp = (iqCmd / 20.0) * (h * 0.38) + (derate > 0 ? 6 : 0);
-      const ripple = notchToggle.checked ? 0.0 : 4.5;
-      phaseTime += 0.08;
-
-      [{ offset: 0, color: '#38bdf8' }, { offset: (2 * Math.PI) / 3, color: '#a855f7' }, { offset: (4 * Math.PI) / 3, color: '#34d399' }].forEach(p => {
-        ctx.beginPath(); ctx.strokeStyle = p.color; ctx.lineWidth = 2;
-        for (let x = 0; x < w; x++) {
-          const angle = phaseTime + (x * 0.05) + p.offset;
-          const y = h / 2 + Math.sin(angle) * amp + Math.sin(angle * 15) * ripple;
-          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        function changeLanguage(lang) {
+            const t = i18n[lang];
+            document.getElementById('ui-title').innerText = t.title;
+            document.getElementById('ui-btn-csv').innerText = t.btnCsv;
+            document.getElementById('ui-telemetry-hdr').innerText = t.telemetryHdr;
+            document.getElementById('ui-yaw').innerText = t.yaw;
+            document.getElementById('ui-pitch').innerText = t.pitch;
+            document.getElementById('ui-iq').innerText = t.iq;
+            document.getElementById('ui-temp').innerText = t.temp;
+            document.getElementById('ui-state').innerText = t.state;
+            document.getElementById('ui-control-hdr').innerText = t.controlHdr;
+            document.getElementById('ui-kp').innerText = t.kp;
+            document.getElementById('ui-friction').innerText = t.friction;
+            document.getElementById('ui-notch').innerText = t.notch;
+            document.getElementById('ui-presets-hdr').innerText = t.presetsHdr;
+            document.getElementById('ui-home').innerText = t.home;
+            document.getElementById('ui-sweep').innerText = t.sweep;
         }
-        ctx.stroke();
-      });
 
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ yaw: targetYaw, pitch: targetPitch, temp: inverterTemp, estop: estopActive }));
-      }
-      renderer.render(scene, camera);
-    }
-    
-    // --- In-Browser Blackbox Telemetry Recorder ---
-    let blackboxLog = [];
-    setInterval(() => {
-      if (!estopActive) {
-        blackboxLog.push({
-          timestamp: new Date().toISOString(),
-          yaw: actualYaw,
-          pitch: actualPitch,
-          temp: inverterTemp,
-          estop: estopActive
-        });
-        if (blackboxLog.length > 3000) blackboxLog.shift(); // Keep last 50 mins
-      }
-    }, 1000);
+        function updateKp(val) { document.getElementById('val-kp').innerText = val; }
+        function updateFriction(val) { document.getElementById('val-friction').innerText = val + " A"; }
+    </script>
 
-    function downloadBlackboxCSV() {
-      if (blackboxLog.length === 0) { alert('No telemetry recorded yet.'); return; }
-      let csv = 'timestamp,yaw_rad,pitch_rad,inverter_temp_c,estop\n';
-      blackboxLog.forEach(row => {
-        csv += `${row.timestamp},${row.yaw.toFixed(4)},${row.pitch.toFixed(4)},${row.temp.toFixed(1)},${row.estop}\n`;
-      });
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.setAttribute('href', url);
-      a.setAttribute('download', `apex_blackbox_${Date.now()}.csv`);
-      a.click();
-    }
+    <!-- Three.js 3D Digital Twin Rendering Script -->
+    <script>
+        let scene, camera, renderer, actuatorGroup;
+        let actualYaw = 0, actualPitch = 0;
+        let targetYaw = 0, targetPitch = 0;
+        let estopActive = false;
+        let inverterTemp = 42.0;
 
-    // Register Service Worker for PWA Offline Support
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed', err));
-    }
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0f19);
 
-    animate();
-  </script>
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(3, 2, 3);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            dirLight.position.set(5, 10, 7);
+            scene.add(dirLight);
+
+            // Grid Floor
+            const grid = new THREE.GridHelper(10, 10, 0x1e293b, 0x1e293b);
+            grid.position.y = -1;
+            scene.add(grid);
+
+            // Actuator 3D Model Construction (Yaw / Pitch Gimbal)
+            actuatorGroup = new THREE.Group();
+            
+            // Base Mount
+            const baseGeo = new THREE.CylinderGeometry(0.6, 0.7, 0.4, 32);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.2 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = -0.8;
+            actuatorGroup.add(base);
+
+            // Yaw Axis Housing
+            const yawGeo = new THREE.BoxGeometry(0.8, 0.6, 0.8);
+            const motorMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.5, roughness: 0.3 });
+            const yawMesh = new THREE.Mesh(yawGeo, motorMat);
+            yawMesh.position.y = -0.3;
+            actuatorGroup.add(yawMesh);
+
+            scene.add(actuatorGroup);
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function toggleEstop() {
+            estopActive = !estopActive;
+            const btn = document.getElementById('estop-btn');
+            const stateVal = document.getElementById('val-state');
+            if (estopActive) {
+                btn.className = "bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition shadow-lg";
+                btn.innerText = "E-STOP: ACTIVE (RESET)";
+                stateVal.innerText = "E-STOP TRIPPED";
+                stateVal.className = "font-bold text-rose-500";
+            } else {
+                btn.className = "bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded transition shadow-lg";
+                btn.innerText = "E-STOP: OFF";
+                stateVal.innerText = "ARMED";
+                stateVal.className = "font-bold text-emerald-400";
+            }
+        }
+
+        function setTarget(y, p) {
+            targetYaw = y;
+            targetPitch = p;
+        }
+
+        // In-Browser Blackbox Telemetry Recorder
+        let blackboxLog = [];
+        setInterval(() => {
+            if (!estopActive) {
+                // Smooth interpolation toward target
+                actualYaw += (targetYaw - actualYaw) * 0.1;
+                actualPitch += (targetPitch - actualPitch) * 0.1;
+                
+                document.getElementById('val-yaw').innerText = actualYaw.toFixed(2) + " rad";
+                document.getElementById('val-pitch').innerText = actualPitch.toFixed(2) + " rad";
+                document.getElementById('val-iq').innerText = (Math.sin(Date.now() * 0.005) * 1.5 + 1.8).toFixed(2) + " A";
+
+                blackboxLog.push({
+                    timestamp: new Date().toISOString(),
+                    yaw: actualYaw,
+                    pitch: actualPitch,
+                    temp: inverterTemp,
+                    estop: estopActive
+                });
+                if (blackboxLog.length > 3000) blackboxLog.shift();
+            }
+        }, 100);
+
+        function downloadBlackboxCSV() {
+            if (blackboxLog.length === 0) { alert('No telemetry recorded yet.'); return; }
+            let csv = 'timestamp,yaw_rad,pitch_rad,inverter_temp_c,estop\n';
+            blackboxLog.forEach(row => {
+                csv += `${row.timestamp},${row.yaw.toFixed(4)},${row.pitch.toFixed(4)},${row.temp.toFixed(1)},${row.estop}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `apex_blackbox_${Date.now()}.csv`);
+            a.click();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (actuatorGroup && !estopActive) {
+                actuatorGroup.rotation.y = actualYaw;
+            }
+            renderer.render(scene, camera);
+        }
+
+        init3D();
+        animate();
+
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log('SW failed', err));
+        }
+    </script>
 </body>
 </html>
