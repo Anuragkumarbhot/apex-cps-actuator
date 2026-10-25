@@ -22,3 +22,7 @@ add_test(NAME SCurveProfileTest COMMAND test_scurve)
 add_executable(test_friction tests/test_friction.c)
 target_link_libraries(test_friction m)
 add_test(NAME FrictionCompTest COMMAND test_friction)
+
+add_executable(test_control_loop tests/test_control_loop.c)
+target_link_libraries(test_control_loop m)
+add_test(NAME ControlLoopIntegrationTest COMMAND test_control_loop)
