@@ -11,3 +11,7 @@ add_executable(test_foc tests/test_foc.c)
 target_link_libraries(test_foc foc_core m)
 enable_testing()
 add_test(NAME FOC_Unit_Tests COMMAND test_foc)
+
+add_executable(test_biquad tests/test_biquad.c)
+target_link_libraries(test_biquad m)
+add_test(NAME BiquadFilterTest COMMAND test_biquad)
