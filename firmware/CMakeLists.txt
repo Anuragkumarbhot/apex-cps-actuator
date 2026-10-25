@@ -18,3 +18,7 @@ add_test(NAME SafetyWatchdogTest COMMAND test_watchdog)
 add_executable(test_scurve tests/test_scurve.c)
 target_link_libraries(test_scurve m)
 add_test(NAME SCurveProfileTest COMMAND test_scurve)
+
+add_executable(test_friction tests/test_friction.c)
+target_link_libraries(test_friction m)
+add_test(NAME FrictionCompTest COMMAND test_friction)
