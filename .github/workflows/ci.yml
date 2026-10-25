@@ -5,28 +5,49 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  build-and-test:
+  build-test-and-publish:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Build & Run C Firmware Unit Tests (FOC, Notch, Thermal, Watchdog)
+      - name: Install Python Plotting Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install matplotlib
+
+      - name: Build & Run C Firmware Unit Tests (Biquad, Cascade Thermal, Watchdog, S-Curve)
         run: |
           cd firmware
           mkdir -p build && cd build
           cmake ..
           make
-          ctest --output-on-failure
+          ctest --output-on-failure -V
 
-      - name: Run Automated Python HIL Test Suite
+      - name: Run Automated Python HIL Verification Suite
         run: |
           python3 tests/hil_test_runner.py
+
+      - name: Generate Closed-Loop Telemetry CSV & 4-Panel PNG Report
+        run: |
+          python3 scripts/plot_telemetry.py
+          ls -lh logs/
+
+      - name: Upload Telemetry Plots, CSV Logs & Compiled Test Binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex-cps-telemetry-and-binaries
+          path: |
+            logs/telemetry_report.png
+            logs/telemetry_run.csv
+            firmware/build/test_*
+          retention-days: 30
