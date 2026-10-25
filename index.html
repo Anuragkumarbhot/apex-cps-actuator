@@ -3,235 +3,400 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Apex-CPS" />
-  <link rel="manifest" href="manifest.json" />
-  <title>Apex-CPS Dual-Axis Controller</title>
+  <title>Apex-CPS Dual-Axis Actuator | iPhone 15 Spatial Controller</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
-    :root { --bg: #0d1117; --card: #161b22; --accent: #2f81f7; --danger: #da3633; --text: #e6edf3; }
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 12px; user-select: none; -webkit-user-select: none; }
-    h2 { margin: 0 0 10px 0; font-size: 1.15rem; display: flex; justify-content: space-between; align-items: center; }
-    .badge { font-size: 0.72rem; background: #238636; padding: 4px 8px; border-radius: 6px; }
-    .badge-ws { font-size: 0.72rem; background: #8957e5; padding: 4px 8px; border-radius: 6px; }
-    #canvas3d { width: 100%; height: 190px; background: #090d11; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
-    #scopeCanvas { width: 100%; height: 95px; background: #090d11; border-radius: 8px; display: block; margin-top: 6px; }
-    .card { background: var(--card); border: 1px solid #30363d; border-radius: 12px; padding: 11px; margin-bottom: 10px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.84rem; }
-    .val { font-size: 1.15rem; font-weight: 700; color: var(--accent); margin-top: 2px; }
-    .label { color: #8b949e; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em; }
-    input[type=range] { width: 100%; margin: 6px 0; }
-    button { width: 100%; padding: 12px; border: none; border-radius: 10px; font-size: 0.92rem; font-weight: 700; cursor: pointer; }
-    .btn-imu { background: var(--accent); color: #fff; }
-    .btn-estop { background: var(--danger); color: #fff; }
+    body { background-color: #0b0f19; color: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-x: hidden; }
+    .glass { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.6); }
+    .led-green { box-shadow: 0 0 10px #22c55e; }
+    .led-amber { box-shadow: 0 0 12px #f59e0b; }
+    .led-red { box-shadow: 0 0 14px #ef4444; }
   </style>
 </head>
-<body>
-  <h2>Apex-CPS Controller <span id="wsStatus" class="badge-ws">WS: Disconnected</span></h2>
+<body class="min-h-screen flex flex-col p-3 gap-3">
 
-  <div id="canvas3d"></div>
-
-  <div class="card grid">
-    <div>
-      <div class="label">YAW (AZIMUTH)</div>
-      <div class="mono">Cmd: <span id="cmdYaw">+0.000</span> rad</div>
-      <div class="mono val" id="actYaw">+0.000 rad</div>
+  <!-- Header Bar -->
+  <header class="glass rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+    <div class="flex items-center gap-3">
+      <div id="status-led" class="w-3.5 h-3.5 rounded-full bg-emerald-500 led-green"></div>
+      <div>
+        <h1 class="text-sm md:text-base font-bold tracking-wider text-white">APEX-CPS DUAL-AXIS ACTUATOR</h1>
+        <p class="text-xs text-slate-400">STM32G4 FOC • CAN 2.0B (0x141) • iPhone 15 Spatial Controller</p>
+      </div>
     </div>
-    <div>
-      <div class="label">PITCH (ELEVATION)</div>
-      <div class="mono">Cmd: <span id="cmdPitch">+0.000</span> rad</div>
-      <div class="mono val" id="actPitch">+0.000 rad</div>
+    <div class="flex items-center gap-2">
+      <input id="ws-url" type="text" value="ws://localhost:8765" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-sky-400 w-44" placeholder="ws://IP:8765" />
+      <button onclick="connectWebSocket()" class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">Connect Bridge</button>
+      <button id="estop-btn" onclick="toggleEstop()" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">E-STOP (0x000)</button>
     </div>
-  </div>
+  </header>
 
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <span class="label">FOC 3-PHASE CURRENTS & TORQUE</span>
-      <span class="mono" style="font-size:0.78rem;color:#3fb950;" id="torqueReadout">Tau: 0.00 Nm | Iq: 0.00 A</span>
+  <!-- Main Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 flex-1">
+
+    <!-- Left Column: iPhone 15 IMU & Manual Controls -->
+    <div class="glass rounded-xl p-4 flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <span class="text-xs font-bold text-sky-400 uppercase tracking-wider">iPhone 15 IMU Teleop</span>
+        <span id="imu-badge" class="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded">Standby</span>
+      </div>
+
+      <button id="imu-btn" onclick="enableiPhoneIMU()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-4 rounded-lg text-xs tracking-wide transition shadow-lg">
+        📱 Enable iPhone 15 IMU Motion Follow
+      </button>
+
+      <!-- Sliders -->
+      <div class="space-y-3">
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span>Target Yaw (Azimuth)</span>
+            <span id="yaw-val" class="text-sky-400 font-bold">0.00 rad</span>
+          </div>
+          <input id="yaw-slider" type="range" min="-1.57" max="1.57" step="0.01" value="0" class="w-full accent-sky-500" />
+        </div>
+
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span>Target Pitch (Elevation)</span>
+            <span id="pitch-val" class="text-purple-400 font-bold">0.00 rad</span>
+          </div>
+          <input id="pitch-slider" type="range" min="-1.20" max="1.20" step="0.01" value="0" class="w-full accent-purple-500" />
+        </div>
+      </div>
+
+      <!-- Biquad Notch Filter Control -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 space-y-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-xs font-bold text-emerald-400">250 Hz Biquad Notch Filter</div>
+            <div class="text-[11px] text-slate-400">Harmonic Drive Resonance Suppression</div>
+          </div>
+          <input id="notch-toggle" type="checkbox" checked class="w-4 h-4 accent-emerald-500" />
+        </div>
+        <div class="flex justify-between text-[11px] text-slate-300 pt-1 border-t border-slate-800">
+          <span>Attenuation @ 250 Hz:</span>
+          <span id="notch-status" class="text-emerald-400 font-bold">-18.4 dB (Active)</span>
+        </div>
+      </div>
+
+      <!-- CAN 2.0B Frame Inspector -->
+      <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 mt-auto">
+        <div class="text-[11px] text-slate-400 mb-1 flex justify-between">
+          <span>CAN 2.0B TX FRAME (ID: 0x141)</span>
+          <span id="can-rate" class="text-emerald-400">200 Hz</span>
+        </div>
+        <div id="can-hex" class="text-sm font-bold tracking-widest text-amber-400 break-all">
+          00 00 00 00 00 00 00 01
+        </div>
+      </div>
     </div>
-    <canvas id="scopeCanvas" width="360" height="95"></canvas>
-  </div>
 
-  <div class="card">
-    <div class="label" style="margin-bottom:4px;">CAN 2.0B TX FRAME (ID 0x141 @ 50Hz)</div>
-    <div class="mono" id="canHex">0x141 [8] : 00 00 00 00 00 00 00 01</div>
-  </div>
-
-  <div class="card">
-    <button class="btn-imu" id="imuBtn" onclick="toggleIMU()">Enable iPhone 15 IMU Motion Follow</button>
-    <div style="margin-top:8px;font-size:0.82rem;">
-      <label>Manual Yaw (-1.57 to +1.57 rad)</label>
-      <input type="range" id="yawSlider" min="-1.57" max="1.57" step="0.01" value="0">
-      <label>Manual Pitch (-0.78 to +1.57 rad)</label>
-      <input type="range" id="pitchSlider" min="-0.78" max="1.57" step="0.01" value="0">
+    <!-- Center Column: 3D Digital Twin Viewport -->
+    <div class="glass rounded-xl p-3 flex flex-col relative min-h-[320px]">
+      <div class="absolute top-3 left-4 z-10 pointer-events-none">
+        <div class="text-xs font-bold text-white">3D DIGITAL TWIN (THREE.JS)</div>
+        <div class="text-[11px] text-slate-400">Real-Time Gimbal & Gravity Vector</div>
+      </div>
+      <div id="three-container" class="w-full h-full flex-1 rounded-lg overflow-hidden"></div>
     </div>
-  </div>
 
-  <button class="btn-estop" onclick="triggerEstop()">EMERGENCY STOP (0x000)</button>
+    <!-- Right Column: Inverter Thermal Derating & 3-Phase FOC Scope -->
+    <div class="glass rounded-xl p-4 flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <span class="text-xs font-bold text-amber-400 uppercase tracking-wider">Inverter Thermal Protection</span>
+        <div class="flex items-center gap-2">
+          <div id="thermal-led" class="w-3 h-3 rounded-full bg-emerald-500 led-green"></div>
+          <span id="thermal-state" class="text-xs font-bold text-emerald-400">NOMINAL</span>
+        </div>
+      </div>
+
+      <!-- Thermal Gauge & Simulator -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 space-y-3">
+        <div class="flex justify-between items-end">
+          <div>
+            <div class="text-[11px] text-slate-400">MOSFET Bridge Temp</div>
+            <div id="temp-readout" class="text-2xl font-bold text-white">38.5 °C</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[11px] text-slate-400">Derated Iq Limit</div>
+            <div id="iq-limit-readout" class="text-lg font-bold text-sky-400">20.0 A (100%)</div>
+          </div>
+        </div>
+
+        <!-- Thermal Progress Bar -->
+        <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+          <div id="thermal-bar" class="bg-emerald-500 h-full transition-all duration-150" style="width: 38.5%"></div>
+        </div>
+
+        <div class="flex justify-between text-[10px] text-slate-400">
+          <span>25°C Ambient</span>
+          <span class="text-amber-400">75°C Derate Start</span>
+          <span class="text-rose-500">95°C Cutoff</span>
+        </div>
+
+        <!-- Thermal Stress Slider for Testing Derating Curve -->
+        <div class="pt-2 border-t border-slate-800">
+          <div class="flex justify-between text-[11px] mb-1">
+            <span class="text-slate-300">Simulate Thermal Load (Test Derating)</span>
+            <span class="text-amber-400 font-bold" id="sim-temp-label">38.5 °C</span>
+          </div>
+          <input id="temp-slider" type="range" min="25" max="100" step="0.5" value="38.5" class="w-full accent-amber-500" />
+        </div>
+      </div>
+
+      <!-- 3-Phase FOC Current Oscilloscope -->
+      <div class="flex-1 flex flex-col bg-slate-950 border border-slate-800 rounded-lg p-3">
+        <div class="flex justify-between text-[11px] text-slate-400 mb-2">
+          <span>FOC 3-PHASE CURRENTS (Ia, Ib, Ic)</span>
+          <span id="iq-actual" class="text-sky-400 font-bold">Iq: 1.85 A</span>
+        </div>
+        <canvas id="foc-scope" class="w-full h-36 flex-1 rounded bg-slate-900"></canvas>
+      </div>
+    </div>
+
+  </div>
 
   <script>
-    // WebSocket Telemetry Connection
+    // --- State Variables ---
+    let targetYaw = 0.0, targetPitch = 0.0;
+    let actualYaw = 0.0, actualPitch = 0.0;
+    let inverterTemp = 38.5;
+    let maxCurrentA = 20.0;
+    let estopActive = false;
     let ws = null;
-    function connectWebSocket() {
-      ws = new WebSocket('ws://localhost:8765');
-      ws.onopen = () => {
-        const badge = document.getElementById('wsStatus');
-        badge.innerText = 'WS: Connected';
-        badge.style.background = '#238636';
-      };
-      ws.onclose = () => {
-        const badge = document.getElementById('wsStatus');
-        badge.innerText = 'WS: Disconnected';
-        badge.style.background = '#8957e5';
-        setTimeout(connectWebSocket, 3000); // Reconnect retry
-      };
+
+    const yawSlider = document.getElementById('yaw-slider');
+    const pitchSlider = document.getElementById('pitch-slider');
+    const tempSlider = document.getElementById('temp-slider');
+    const notchToggle = document.getElementById('notch-toggle');
+
+    yawSlider.addEventListener('input', e => { targetYaw = parseFloat(e.target.value); });
+    pitchSlider.addEventListener('input', e => { targetPitch = parseFloat(e.target.value); });
+    tempSlider.addEventListener('input', e => {
+      inverterTemp = parseFloat(e.target.value);
+      document.getElementById('sim-temp-label').innerText = inverterTemp.toFixed(1) + ' °C';
+    });
+    notchToggle.addEventListener('change', e => {
+      const st = document.getElementById('notch-status');
+      st.innerText = e.target.checked ? '-18.4 dB (Active)' : '0.0 dB (Bypassed)';
+      st.className = e.target.checked ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold';
+    });
+
+    // --- Thermal Derating Curve (Matches firmware/src/pid_cascade.c) ---
+    function computeThermalDerating(tempC) {
+      if (tempC <= 75.0) return 1.0;
+      if (tempC >= 95.0) return 0.0;
+      return (95.0 - tempC) / (95.0 - 75.0);
     }
-    connectWebSocket();
 
-    // 3D Gimbal Setup
-    const container = document.getElementById('canvas3d');
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(2.4, 1.9, 3.0);
-    camera.lookAt(0, 0.4, 0);
+    // --- CAN 2.0B Frame Packer (Little-Endian 0x141) ---
+    function packCanFrame(yaw, pitch, torqueScale, estop) {
+      const buf = new ArrayBuffer(8);
+      const view = new DataView(buf);
+      view.setInt16(0, Math.round(yaw * 1000), true);
+      view.setInt16(2, Math.round(pitch * 1000), true);
+      view.setInt16(4, Math.round(torqueScale * 100), true);
+      view.setUint8(6, notchToggle.checked ? 1 : 0);
+      view.setUint8(7, estop ? 0 : 1);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+    }
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    container.appendChild(renderer.domElement);
-
-    const light = new THREE.DirectionalLight(0xffffff, 1.2);
-    light.position.set(4, 6, 4);
-    scene.add(light, new THREE.AmbientLight(0x404040));
-    scene.add(new THREE.GridHelper(4, 10, 0x30363d, 0x21262d));
-
-    const yawGroup = new THREE.Group();
-    const baseMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.45, 0.5, 0.5, 24),
-      new THREE.MeshStandardMaterial({ color: 0x2f81f7, metalness: 0.5, roughness: 0.4 })
-    );
-    baseMesh.position.y = 0.25;
-    yawGroup.add(baseMesh);
-
-    const pitchGroup = new THREE.Group();
-    pitchGroup.position.y = 0.65;
-    const pitchJoint = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.32, 0.32, 0.45, 24),
-      new THREE.MeshStandardMaterial({ color: 0x8b949e, metalness: 0.6, roughness: 0.3 })
-    );
-    pitchJoint.rotation.z = Math.PI / 2;
-    const armMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.18, 1.1, 0.18),
-      new THREE.MeshStandardMaterial({ color: 0x3fb950, metalness: 0.4, roughness: 0.4 })
-    );
-    armMesh.position.y = 0.55;
-    pitchGroup.add(pitchJoint, armMesh);
-    yawGroup.add(pitchGroup);
-    scene.add(yawGroup);
-
-    // Oscilloscope & State
-    const scope = document.getElementById('scopeCanvas');
-    const ctx = scope.getContext('2d');
-    const histA = [], histB = [], histC = [];
-    const maxPts = 120;
-
-    let targetYaw = 0, targetPitch = 0, actYaw = 0, actPitch = 0;
-    let imuActive = false, estop = false;
-    const yawSlider = document.getElementById('yawSlider');
-    const pitchSlider = document.getElementById('pitchSlider');
-
-    yawSlider.oninput = e => { if (!imuActive) targetYaw = parseFloat(e.target.value); };
-    pitchSlider.oninput = e => { if (!imuActive) targetPitch = parseFloat(e.target.value); };
-
-    async function toggleIMU() {
-      if (!imuActive) {
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-          const perm = await DeviceOrientationEvent.requestPermission();
-          if (perm !== 'granted') return alert('Motion permission denied');
+    // --- iPhone 15 Web IMU Orientation Handler ---
+    async function enableiPhoneIMU() {
+      const badge = document.getElementById('imu-badge');
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const permission = await DeviceOrientationEvent.requestPermission();
+          if (permission === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+            badge.innerText = 'iPhone 15 Active';
+            badge.className = 'text-[11px] bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded font-bold';
+          }
+        } catch (err) {
+          alert('IMU Permission denied or requires HTTPS.');
         }
-        window.addEventListener('deviceorientation', handleMotion);
-        imuActive = true; estop = false;
-        document.getElementById('imuBtn').innerText = 'Disable iPhone IMU Follow';
       } else {
-        window.removeEventListener('deviceorientation', handleMotion);
-        imuActive = false;
-        document.getElementById('imuBtn').innerText = 'Enable iPhone 15 IMU Motion Follow';
+        window.addEventListener('deviceorientation', handleOrientation);
+        badge.innerText = 'IMU Listening';
+        badge.className = 'text-[11px] bg-sky-900 text-sky-300 px-2 py-0.5 rounded font-bold';
       }
     }
 
-    function handleMotion(e) {
-      if (!imuActive || estop) return;
-      targetYaw = Math.max(-1.57, Math.min(1.57, (e.gamma || 0) * (Math.PI / 180)));
-      targetPitch = Math.max(-0.78, Math.min(1.57, (e.beta || 0) * (Math.PI / 180)));
+    function handleOrientation(event) {
+      if (estopActive) return;
+      const gamma = event.gamma || 0; // Roll -> Yaw
+      const beta = event.beta || 0;   // Pitch -> Pitch
+      targetYaw = Math.max(-1.57, Math.min(1.57, (gamma * Math.PI) / 180));
+      targetPitch = Math.max(-1.20, Math.min(1.20, ((beta - 45) * Math.PI) / 180));
       yawSlider.value = targetYaw;
       pitchSlider.value = targetPitch;
     }
 
-    function triggerEstop() {
-      estop = true; imuActive = false; targetYaw = 0; targetPitch = 0;
-      document.getElementById('imuBtn').innerText = 'Enable iPhone 15 IMU Motion Follow';
+    function toggleEstop() {
+      estopActive = !estopActive;
+      const btn = document.getElementById('estop-btn');
+      btn.innerText = estopActive ? 'RESET E-STOP' : 'E-STOP (0x000)';
+      btn.className = estopActive
+        ? 'bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded transition'
+        : 'bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded transition';
     }
 
-    function drawWave(arr, color) {
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.6;
-      for (let i = 0; i < arr.length; i++) {
-        const x = (i / maxPts) * scope.width;
-        const y = (scope.height / 2) - (arr[i] * 9);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    // --- WebSocket Telemetry Bridge ---
+    function connectWebSocket() {
+      const url = document.getElementById('ws-url').value;
+      try {
+        ws = new WebSocket(url);
+        ws.onopen = () => {
+          document.getElementById('imu-badge').innerText = 'WS Linked';
+        };
+        ws.onmessage = (msg) => {
+          const data = JSON.parse(msg.data);
+          if (data.inverter_temp_c) {
+            inverterTemp = data.inverter_temp_c;
+            tempSlider.value = inverterTemp;
+          }
+        };
+      } catch (e) {
+        console.log('Running in standalone simulation mode.');
       }
-      ctx.stroke();
     }
 
-    setInterval(() => {
-      const prevPitch = actPitch;
-      if (!estop) {
-        actYaw += (targetYaw - actYaw) * 0.18;
-        actPitch += (targetPitch - actPitch) * 0.18;
-      }
-      yawGroup.rotation.y = -actYaw;
-      pitchGroup.rotation.x = actPitch;
-      renderer.render(scene, camera);
+    // --- Three.js 3D Actuator Digital Twin ---
+    const container = document.getElementById('three-container');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(3.2, 2.4, 3.8);
+    camera.lookAt(0, 0.5, 0);
 
-      // Send telemetry via WebSocket if connected
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1.2);
+    light.position.set(5, 8, 5);
+    scene.add(light, new THREE.AmbientLight(0x404060, 1.2));
+
+    const grid = new THREE.GridHelper(6, 12, 0x334155, 0x1e293b);
+    scene.add(grid);
+
+    // Base & Yaw Gimbal
+    const yawGroup = new THREE.Group();
+    const baseMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.7, 0.4, 32),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.3 })
+    );
+    baseMesh.position.y = 0.2;
+    scene.add(baseMesh);
+
+    const turretMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.9, 0.8),
+      new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.5, roughness: 0.4 })
+    );
+    turretMesh.position.y = 0.85;
+    yawGroup.add(turretMesh);
+
+    // Pitch Axis Arm
+    const pitchGroup = new THREE.Group();
+    pitchGroup.position.y = 1.0;
+    const armMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35, 0.35, 1.8),
+      new THREE.MeshStandardMaterial({ color: 0xa855f7, metalness: 0.4, roughness: 0.3 })
+    );
+    armMesh.position.z = 0.6;
+    pitchGroup.add(armMesh);
+    yawGroup.add(pitchGroup);
+    scene.add(yawGroup);
+
+    // --- 3-Phase Oscilloscope Setup ---
+    const canvas = document.getElementById('foc-scope');
+    const ctx = canvas.getContext('2d');
+    let phaseTime = 0;
+
+    // --- Main 60Hz Cyber-Physical Update Loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const derate = estopActive ? 0.0 : computeThermalDerating(inverterTemp);
+      const effectiveMaxIq = maxCurrentA * derate;
+
+      // Update Thermal UI
+      document.getElementById('temp-readout').innerText = inverterTemp.toFixed(1) + ' °C';
+      document.getElementById('iq-limit-readout').innerText = `${effectiveMaxIq.toFixed(1)} A (${Math.round(derate * 100)}%)`;
+
+      const thermalBar = document.getElementById('thermal-bar');
+      const thermalLed = document.getElementById('thermal-led');
+      const thermalState = document.getElementById('thermal-state');
+      thermalBar.style.width = `${Math.min(100, inverterTemp)}%`;
+
+      if (inverterTemp >= 95.0 || estopActive) {
+        thermalBar.className = 'bg-rose-600 h-full transition-all duration-150';
+        thermalLed.className = 'w-3 h-3 rounded-full bg-rose-500 led-red';
+        thermalState.innerText = estopActive ? 'E-STOP CUTOFF' : 'THERMAL CUTOFF';
+        thermalState.className = 'text-xs font-bold text-rose-500';
+      } else if (inverterTemp > 75.0) {
+        thermalBar.className = 'bg-amber-500 h-full transition-all duration-150';
+        thermalLed.className = 'w-3 h-3 rounded-full bg-amber-400 led-amber';
+        thermalState.innerText = 'DERATING ACTIVE';
+        thermalState.className = 'text-xs font-bold text-amber-400';
+      } else {
+        thermalBar.className = 'bg-emerald-500 h-full transition-all duration-150';
+        thermalLed.className = 'w-3 h-3 rounded-full bg-emerald-500 led-green';
+        thermalState.innerText = 'NOMINAL';
+        thermalState.className = 'text-xs font-bold text-emerald-400';
+      }
+
+      // Closed-loop tracking scaled by thermal derating
+      if (derate > 0) {
+        actualYaw += (targetYaw - actualYaw) * 0.12 * derate;
+        actualPitch += (targetPitch - actualPitch) * 0.12 * derate;
+      }
+
+      yawGroup.rotation.y = actualYaw;
+      pitchGroup.rotation.x = -actualPitch;
+
+      document.getElementById('yaw-val').innerText = actualYaw.toFixed(2) + ' rad';
+      document.getElementById('pitch-val').innerText = actualPitch.toFixed(2) + ' rad';
+      document.getElementById('can-hex').innerText = packCanFrame(actualYaw, actualPitch, derate, estopActive);
+
+      // Gravity feedforward + tracking Iq calculation
+      const iqCmd = Math.min(effectiveMaxIq, Math.abs(1.85 * Math.cos(actualPitch) + (targetPitch - actualPitch) * 8.0) * derate);
+      document.getElementById('iq-actual').innerText = `Iq: ${iqCmd.toFixed(2)} A`;
+
+      // Render 3-Phase FOC Currents
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = canvas.width, h = canvas.height;
+      const amp = (iqCmd / 20.0) * (h * 0.38) + (derate > 0 ? 6 : 0);
+      const ripple = notchToggle.checked ? 0.0 : 4.5; // Show 250Hz harmonic ripple when notch is off
+      phaseTime += 0.08;
+
+      const phases = [
+        { offset: 0, color: '#38bdf8' },
+        { offset: (2 * Math.PI) / 3, color: '#a855f7' },
+        { offset: (4 * Math.PI) / 3, color: '#34d399' }
+      ];
+
+      phases.forEach(p => {
+        ctx.beginPath();
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 2;
+        for (let x = 0; x < w; x++) {
+          const angle = phaseTime + (x * 0.05) + p.offset;
+          const y = h / 2 + Math.sin(angle) * amp + Math.sin(angle * 15) * ripple;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      });
+
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ yaw: targetYaw, pitch: targetPitch, estop: estop }));
+        ws.send(JSON.stringify({ yaw: targetYaw, pitch: targetPitch, temp: inverterTemp, estop: estopActive }));
       }
 
-      const prevPitchVel = (actPitch - prevPitch) / 0.02;
-      const tauGrav = estop ? 0 : (10.84 * Math.sin(actPitch)) + (prevPitchVel * 2.5);
-      const iq = tauGrav / (100 * 0.78 * 0.062);
-      const thetaElec = actPitch * 100 * 7;
+      renderer.render(scene, camera);
+    }
 
-      const ia = iq * Math.cos(thetaElec);
-      const ib = iq * Math.cos(thetaElec - (2 * Math.PI / 3));
-      const ic = iq * Math.cos(thetaElec + (2 * Math.PI / 3));
-
-      histA.push(ia); histB.push(ib); histC.push(ic);
-      if (histA.length > maxPts) { histA.shift(); histB.shift(); histC.shift(); }
-
-      ctx.clearRect(0, 0, scope.width, scope.height);
-      ctx.strokeStyle = '#21262d';
-      ctx.beginPath(); ctx.moveTo(0, scope.height/2); ctx.lineTo(scope.width, scope.height/2); ctx.stroke();
-      drawWave(histA, '#ff7b72');
-      drawWave(histB, '#3fb950');
-      drawWave(histC, '#2f81f7');
-
-      document.getElementById('torqueReadout').innerText = `Tau: ${tauGrav.toFixed(2)} Nm | Iq: ${iq.toFixed(2)} A`;
-      document.getElementById('cmdYaw').innerText = (targetYaw >= 0 ? '+' : '') + targetYaw.toFixed(3);
-      document.getElementById('cmdPitch').innerText = (targetPitch >= 0 ? '+' : '') + targetPitch.toFixed(3);
-      document.getElementById('actYaw').innerText = (actYaw >= 0 ? '+' : '') + actYaw.toFixed(3) + ' rad';
-      document.getElementById('actPitch').innerText = (actPitch >= 0 ? '+' : '') + actPitch.toFixed(3) + ' rad';
-
-      const rawY = Math.round(targetYaw / 0.0001) & 0xFFFF;
-      const rawP = Math.round(targetPitch / 0.0001) & 0xFFFF;
-      const rawFF = Math.round(tauGrav / 0.2) & 0xFF;
-      const b = [rawY & 0xFF, (rawY >> 8) & 0xFF, rawP & 0xFF, (rawP >> 8) & 0xFF, 0, 0, rawFF, estop ? 0 : 1]
-        .map(x => x.toString(16).padStart(2, '0').toUpperCase());
-      document.getElementById('canHex').innerText = `0x141 [8] : ${b.join(' ')}`;
-    }, 20);
+    animate();
   </script>
 </body>
 </html>
