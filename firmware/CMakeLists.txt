@@ -14,3 +14,7 @@ add_test(NAME CascadeThermalTest COMMAND test_cascade_thermal)
 
 add_executable(test_watchdog tests/test_watchdog.c)
 add_test(NAME SafetyWatchdogTest COMMAND test_watchdog)
+
+add_executable(test_scurve tests/test_scurve.c)
+target_link_libraries(test_scurve m)
+add_test(NAME SCurveProfileTest COMMAND test_scurve)
