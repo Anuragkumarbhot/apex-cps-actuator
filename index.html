@@ -3,50 +3,65 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Apex-CPS iPhone 15 Telemetry & IMU Controller</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Apex-CPS" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Apex-CPS Dual-Axis Controller</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
     :root { --bg: #0d1117; --card: #161b22; --accent: #2f81f7; --danger: #da3633; --text: #e6edf3; }
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 14px; }
-    h2 { margin: 0 0 10px 0; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
-    .badge { font-size: 0.75rem; background: #238636; padding: 4px 8px; border-radius: 6px; }
-    #canvas3d { width: 100%; height: 220px; background: #090d11; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
-    .card { background: var(--card); border: 1px solid #30363d; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.88rem; }
-    .val { font-size: 1.25rem; font-weight: 700; color: var(--accent); margin-top: 4px; }
-    input[type=range] { width: 100%; margin: 8px 0; }
-    button { width: 100%; padding: 13px; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 12px; user-select: none; -webkit-user-select: none; }
+    h2 { margin: 0 0 10px 0; font-size: 1.15rem; display: flex; justify-content: space-between; align-items: center; }
+    .badge { font-size: 0.72rem; background: #238636; padding: 4px 8px; border-radius: 6px; }
+    .badge-ws { font-size: 0.72rem; background: #8957e5; padding: 4px 8px; border-radius: 6px; }
+    #canvas3d { width: 100%; height: 190px; background: #090d11; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+    #scopeCanvas { width: 100%; height: 95px; background: #090d11; border-radius: 8px; display: block; margin-top: 6px; }
+    .card { background: var(--card); border: 1px solid #30363d; border-radius: 12px; padding: 11px; margin-bottom: 10px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.84rem; }
+    .val { font-size: 1.15rem; font-weight: 700; color: var(--accent); margin-top: 2px; }
+    .label { color: #8b949e; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em; }
+    input[type=range] { width: 100%; margin: 6px 0; }
+    button { width: 100%; padding: 12px; border: none; border-radius: 10px; font-size: 0.92rem; font-weight: 700; cursor: pointer; }
     .btn-imu { background: var(--accent); color: #fff; }
     .btn-estop { background: var(--danger); color: #fff; }
   </style>
 </head>
 <body>
-  <h2>Apex-CPS Dual-Axis Controller <span class="badge">CAN 1Mbps</span></h2>
+  <h2>Apex-CPS Controller <span id="wsStatus" class="badge-ws">WS: Disconnected</span></h2>
 
   <div id="canvas3d"></div>
 
   <div class="card grid">
     <div>
-      <div style="color:#8b949e;font-size:0.72rem;">YAW (AZIMUTH)</div>
+      <div class="label">YAW (AZIMUTH)</div>
       <div class="mono">Cmd: <span id="cmdYaw">+0.000</span> rad</div>
       <div class="mono val" id="actYaw">+0.000 rad</div>
     </div>
     <div>
-      <div style="color:#8b949e;font-size:0.72rem;">PITCH (ELEVATION)</div>
+      <div class="label">PITCH (ELEVATION)</div>
       <div class="mono">Cmd: <span id="cmdPitch">+0.000</span> rad</div>
       <div class="mono val" id="actPitch">+0.000 rad</div>
     </div>
   </div>
 
   <div class="card">
-    <div style="color:#8b949e;font-size:0.72rem;margin-bottom:4px;">CAN 2.0B TX FRAME (ID 0x141 @ 50Hz)</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span class="label">FOC 3-PHASE CURRENTS & TORQUE</span>
+      <span class="mono" style="font-size:0.78rem;color:#3fb950;" id="torqueReadout">Tau: 0.00 Nm | Iq: 0.00 A</span>
+    </div>
+    <canvas id="scopeCanvas" width="360" height="95"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="label" style="margin-bottom:4px;">CAN 2.0B TX FRAME (ID 0x141 @ 50Hz)</div>
     <div class="mono" id="canHex">0x141 [8] : 00 00 00 00 00 00 00 01</div>
   </div>
 
   <div class="card">
     <button class="btn-imu" id="imuBtn" onclick="toggleIMU()">Enable iPhone 15 IMU Motion Follow</button>
-    <div style="margin-top:10px;font-size:0.85rem;">
+    <div style="margin-top:8px;font-size:0.82rem;">
       <label>Manual Yaw (-1.57 to +1.57 rad)</label>
       <input type="range" id="yawSlider" min="-1.57" max="1.57" step="0.01" value="0">
       <label>Manual Pitch (-0.78 to +1.57 rad)</label>
@@ -57,11 +72,29 @@
   <button class="btn-estop" onclick="triggerEstop()">EMERGENCY STOP (0x000)</button>
 
   <script>
-    // 3D Actuator Gimbal Setup
+    // WebSocket Telemetry Connection
+    let ws = null;
+    function connectWebSocket() {
+      ws = new WebSocket('ws://localhost:8765');
+      ws.onopen = () => {
+        const badge = document.getElementById('wsStatus');
+        badge.innerText = 'WS: Connected';
+        badge.style.background = '#238636';
+      };
+      ws.onclose = () => {
+        const badge = document.getElementById('wsStatus');
+        badge.innerText = 'WS: Disconnected';
+        badge.style.background = '#8957e5';
+        setTimeout(connectWebSocket, 3000); // Reconnect retry
+      };
+    }
+    connectWebSocket();
+
+    // 3D Gimbal Setup
     const container = document.getElementById('canvas3d');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(2.5, 2.0, 3.2);
+    camera.position.set(2.4, 1.9, 3.0);
     camera.lookAt(0, 0.4, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -97,7 +130,12 @@
     yawGroup.add(pitchGroup);
     scene.add(yawGroup);
 
-    // State & Control Loop
+    // Oscilloscope & State
+    const scope = document.getElementById('scopeCanvas');
+    const ctx = scope.getContext('2d');
+    const histA = [], histB = [], histC = [];
+    const maxPts = 120;
+
     let targetYaw = 0, targetPitch = 0, actYaw = 0, actPitch = 0;
     let imuActive = false, estop = false;
     const yawSlider = document.getElementById('yawSlider');
@@ -135,7 +173,20 @@
       document.getElementById('imuBtn').innerText = 'Enable iPhone 15 IMU Motion Follow';
     }
 
+    function drawWave(arr, color) {
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < arr.length; i++) {
+        const x = (i / maxPts) * scope.width;
+        const y = (scope.height / 2) - (arr[i] * 9);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
     setInterval(() => {
+      const prevPitch = actPitch;
       if (!estop) {
         actYaw += (targetYaw - actYaw) * 0.18;
         actPitch += (targetPitch - actPitch) * 0.18;
@@ -144,6 +195,31 @@
       pitchGroup.rotation.x = actPitch;
       renderer.render(scene, camera);
 
+      // Send telemetry via WebSocket if connected
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ yaw: targetYaw, pitch: targetPitch, estop: estop }));
+      }
+
+      const prevPitchVel = (actPitch - prevPitch) / 0.02;
+      const tauGrav = estop ? 0 : (10.84 * Math.sin(actPitch)) + (prevPitchVel * 2.5);
+      const iq = tauGrav / (100 * 0.78 * 0.062);
+      const thetaElec = actPitch * 100 * 7;
+
+      const ia = iq * Math.cos(thetaElec);
+      const ib = iq * Math.cos(thetaElec - (2 * Math.PI / 3));
+      const ic = iq * Math.cos(thetaElec + (2 * Math.PI / 3));
+
+      histA.push(ia); histB.push(ib); histC.push(ic);
+      if (histA.length > maxPts) { histA.shift(); histB.shift(); histC.shift(); }
+
+      ctx.clearRect(0, 0, scope.width, scope.height);
+      ctx.strokeStyle = '#21262d';
+      ctx.beginPath(); ctx.moveTo(0, scope.height/2); ctx.lineTo(scope.width, scope.height/2); ctx.stroke();
+      drawWave(histA, '#ff7b72');
+      drawWave(histB, '#3fb950');
+      drawWave(histC, '#2f81f7');
+
+      document.getElementById('torqueReadout').innerText = `Tau: ${tauGrav.toFixed(2)} Nm | Iq: ${iq.toFixed(2)} A`;
       document.getElementById('cmdYaw').innerText = (targetYaw >= 0 ? '+' : '') + targetYaw.toFixed(3);
       document.getElementById('cmdPitch').innerText = (targetPitch >= 0 ? '+' : '') + targetPitch.toFixed(3);
       document.getElementById('actYaw').innerText = (actYaw >= 0 ? '+' : '') + actYaw.toFixed(3) + ' rad';
@@ -151,7 +227,8 @@
 
       const rawY = Math.round(targetYaw / 0.0001) & 0xFFFF;
       const rawP = Math.round(targetPitch / 0.0001) & 0xFFFF;
-      const b = [rawY & 0xFF, (rawY >> 8) & 0xFF, rawP & 0xFF, (rawP >> 8) & 0xFF, 0, 0, 0, estop ? 0 : 1]
+      const rawFF = Math.round(tauGrav / 0.2) & 0xFF;
+      const b = [rawY & 0xFF, (rawY >> 8) & 0xFF, rawP & 0xFF, (rawP >> 8) & 0xFF, 0, 0, rawFF, estop ? 0 : 1]
         .map(x => x.toString(16).padStart(2, '0').toUpperCase());
       document.getElementById('canHex').innerText = `0x141 [8] : ${b.join(' ')}`;
     }, 20);
