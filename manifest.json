@@ -1,0 +1,16 @@
+{
+  "name": "Apex-CPS Actuator Dashboard",
+  "short_name": "ApexCPS",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#0b0f19",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/Anuragkumarbhot/apex-cps-actuator/main/assets/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
