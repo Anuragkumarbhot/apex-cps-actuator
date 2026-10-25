@@ -30,3 +30,7 @@ add_test(NAME ControlLoopIntegrationTest COMMAND test_control_loop)
 add_executable(test_sensor_motion tests/test_sensor_motion.c)
 target_link_libraries(test_sensor_motion m)
 add_test(NAME SensorMotionTest COMMAND test_sensor_motion)
+
+add_executable(test_linear tests/test_linear.c)
+target_link_libraries(test_linear m)
+add_test(NAME LinearProfileTest COMMAND test_linear)
